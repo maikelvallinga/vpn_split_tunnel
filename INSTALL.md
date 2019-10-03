@@ -16,13 +16,14 @@ Fill in the details and test the connection.
 
 Copy `config.ini.example` to `config.ini` and change your settings.
 
-## Create Virtualenv: KPN-VPN
+## Create Virtualenv: VPN
 
 `mkvirtualenv -p /usr/local/bin/python3 vpn`
 
 Install the pip packages from requirements.txt
 
-`workon kpn-vpn`
+`workon vpn`
+
 `pip3 install -U -r requirements.txt`
 
 ## Copy Settings
