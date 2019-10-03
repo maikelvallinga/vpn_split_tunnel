@@ -1,2 +1,4 @@
 tags
 .idea/
+*.pyc
+config.ini
