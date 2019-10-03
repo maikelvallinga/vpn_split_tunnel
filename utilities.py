@@ -211,38 +211,35 @@ class MacOSUtils:
         process.wait()
         return process.stdout.read().decode(encoding="utf-8").rstrip('\n\r ')
 
-    def switch_wifi(self, ssid, interface='en0', timeout=30):
+    def switch_wifi(self, ssid, wireless_interface='en0', timeout=30):
         """
         Switch to a preferred ssid.
 
         :return:
         """
 
-        current_ssid = self.run_command(f'{self.NETWORKSETUP} -getairportnetwork {interface}')
+        current_ssid = self.run_command(f'{self.NETWORKSETUP} -getairportnetwork {wireless_interface}')
 
         if ssid not in current_ssid:
-            logger.info(f"Switching wireless to {ssid}...")
-            self.run_command(f'networksetup -setairportnetwork {interface} {ssid}')
+            logger.info(f'Switching wireless to {ssid}...')
+            self.run_command(f'{self.NETWORKSETUP} -setairportnetwork {wireless_interface} {ssid}')
 
             timeout = time() + timeout
-            wifi_status = self.run_command(f"ifconfig {interface}")
-            current_ip = self.run_command(f"ipconfig getifaddr {interface}")
+            wifi_status = self.run_command(f"{self.IFCONFIG} {wireless_interface}")
+            current_ip = self.run_command(f"{self.IPCONFIG} getifaddr {wireless_interface}")
 
             while time() < timeout:
 
-                current_ssid = self.run_command("networksetup -getairportnetwork {wireless_interface}".format(
-                    wireless_interface=interface))
-                wifi_status = self.run_command("ifconfig {wireless_interface}".format(
-                    wireless_interface=interface))
-                current_ip = self.run_command("ipconfig getifaddr {wireless_interface}".format(
-                    wireless_interface=interface))
+                current_ssid = self.run_command(f'{self.NETWORKSETUP} -getairportnetwork {wireless_interface}')
+                wifi_status = self.run_command(f'{self.IFCONFIG} {wireless_interface}')
+                current_ip = self.run_command(f'{self.IPCONFIG} getifaddr {wireless_interface}')
                 if str(current_ip).startswith('169.254'):
                     # If APIPA address is assigned, re-enter the loop
                     continue
 
-                logger.debug(f'Connecting to {ssid}... (current: {current_ssid}, status: {wifi_status}')
+                logger.debug(f'Connecting to {ssid}... current: {current_ssid}, status: {wifi_status}')
 
-                if "status: active" in wifi_status and current_ip != "" and ssid in current_ssid:
+                if 'status: active' in wifi_status and current_ip != '' and ssid in current_ssid:
                     # Connected to the ssid so we can exit the loop before the timeout
                     logger.debug(f'Connected to {ssid} with IP: {current_ip}...')
                     return
