@@ -42,23 +42,26 @@ mac_utils = MacOSUtils()
 
 class VPN(object):
 
+    # VPN Settings
     VPN_NAME = config['VPN']['vpn_name']
-    USER_ID = config['VPN']['user_id']
-    USERNAME = config['GENERAL']['username']
 
+    # MACOS Settings
+    USER_ID = config['MACOS']['user_id']
+    USERNAME = config['MACOS']['username']
+    MACOS_NOTIFICATION_ENABLED = config['NOTIFICATION'].getboolean('notifications_enabled')
+
+    # NETWORKING Settings
     ADDRESS_TO_TUNNEL = str(config['NETWORKING']['address_to_tunnel']).split(',')
     NETWORKS_TO_TUNNEL = str(config['NETWORKING']['networks_to_tunnel']).split(',')
     VPN_DOMAINS = str(config['NETWORKING']['vpn_domains']).split(',')
     TUNNEL_INTERFACE = config['NETWORKING']['tunnel_interface']
     WIRELESS_INTERFACE = config['NETWORKING']['wireless_interface']
 
+    # GENERAL Settings
     RETRY_COUNT = int(config['GENERAL']['retry_count'])
     CONNECTION_BAR_WIDTH = int(config['GENERAL']['connection_bar_width'])
 
-    VPN_UTIL_PATH = os.path.dirname(os.path.realpath(__file__))
-    VPN_UTIL = f'{os.path.dirname(os.path.realpath(__file__))}/vpnutil'
-    VPN_DNS_FILENAME = config['GENERAL']['vpn_dns_filename']
-
+    # TIMEOUTS Settings
     RECONNECT_TIMEOUT = int(config['TIMEOUTS']['reconnect_timeout'])
     CONNECT_TIMEOUT = int(config['TIMEOUTS']['connect_timeout'])
     TOKEN_TIMEOUT = int(config['TIMEOUTS']['token_timeout'])
@@ -66,8 +69,7 @@ class VPN(object):
     MAX_FAILURES = int(config['TIMEOUTS']['max_failures'])
     VPN_SLEEP_TIMER = int(config['TIMEOUTS']['vpn_sleep_timer'])
 
-    MACOS_NOTIFICATION_ENABLED = config['NOTIFICATION'].getboolean('macos_enabled')
-
+    # MOUNTS Settings
     MOUNT_USERNAME = config['MOUNTS'].get('mount_username')
     MOUNT_PASSWORD = config['MOUNTS'].get('mount_password')
     MOUNT_FOLDERS = config['MOUNTS'].getboolean('mount_folders')
@@ -76,41 +78,11 @@ class VPN(object):
     TIME_MACHINE_SPARSE_BUNDLE = config['MOUNTS'].get('time_machine_sparse_bundle')
     TIME_MACHINE_SPARSE_BUNDLE_PASSWORD = config['MOUNTS'].get('time_machine_sparse_bundle_password')
 
+    # Other settings
+    VPN_UTIL = f'{os.path.dirname(os.path.realpath(__file__))}/vpnutil'
     tunnel = None
     active = False
     vpn_dns_servers = []
-
-    def create_dns_resolvers(self):
-        """
-        Create the resolver directory at the /etc directory and create the domain files.
-
-        :return:
-        :rtype:
-        """
-
-        timeout = time() + self.CONNECT_TIMEOUT
-        while not os.path.exists(self.VPN_DNS_FILENAME):
-            logger.debug('Waiting for DNS file to be created...')
-            if time() > timeout:
-                return False
-            sleep(1)
-
-        with open(self.VPN_DNS_FILENAME, 'r') as dns:
-            dns_file_content = ''
-            name_servers = dns.read()
-            name_servers = name_servers.split()
-            for name_server in name_servers:
-                self.vpn_dns_servers.append(name_server)
-                dns_file_content += f'nameserver {name_server}\n'
-            logger.debug(f'DNS File Content: \n{dns_file_content}')
-            if not os.path.exists('/etc/resolver'):
-                os.makedirs('/etc/resolver')
-            for domain in self.VPN_DOMAINS:
-                logger.debug('Creating domain file: {domain}'.format(domain=domain))
-                with open('/etc/resolver/{domain}'.format(domain=domain), "w") as domain_file:
-                    domain_file.write(dns_file_content)
-
-            return True
 
     @staticmethod
     def check_connectivity(ping_count=1, test_ip_address=None, lost_connectivity=False):
@@ -128,8 +100,7 @@ class VPN(object):
                 # No DNS servers are set so there is no connectivity, return 0
                 return connectivity
 
-        ping_command = "ping -c {count} -i 1 -W 1 {ip} | grep -oE \'\d+\.\d%\'".format(count=ping_count,
-                                                                                       ip=test_ip_address)
+        ping_command = f"ping -c {ping_count} -i 1 -W 1 {test_ip_address} | grep -oE \'\d+\.\d%\'"
 
         # Try to run the following ping command
         if lost_connectivity:
