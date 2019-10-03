@@ -8,6 +8,9 @@ It has been tested with MacOS Mojave.
 import subprocess
 import logging
 import os
+import sys
+
+from time import time
 
 logger = logging.getLogger('Split_Tunnel')
 
@@ -207,3 +210,42 @@ class MacOSUtils:
                                        stderr=subprocess.STDOUT)
         process.wait()
         return process.stdout.read().decode(encoding="utf-8").rstrip('\n\r ')
+
+    def switch_wifi(self, ssid, interface='en0', timeout=30):
+        """
+        Switch to a preferred ssid.
+
+        :return:
+        """
+
+        current_ssid = self.run_command(f'{self.NETWORKSETUP} -getairportnetwork {interface}')
+
+        if ssid not in current_ssid:
+            logger.info(f"Switching wireless to {ssid}...")
+            self.run_command(f'networksetup -setairportnetwork {interface} {ssid}')
+
+            timeout = time() + timeout
+            wifi_status = self.run_command(f"ifconfig {interface}")
+            current_ip = self.run_command(f"ipconfig getifaddr {interface}")
+
+            while time() < timeout:
+
+                current_ssid = self.run_command("networksetup -getairportnetwork {wireless_interface}".format(
+                    wireless_interface=interface))
+                wifi_status = self.run_command("ifconfig {wireless_interface}".format(
+                    wireless_interface=interface))
+                current_ip = self.run_command("ipconfig getifaddr {wireless_interface}".format(
+                    wireless_interface=interface))
+                if str(current_ip).startswith('169.254'):
+                    # If APIPA address is assigned, re-enter the loop
+                    continue
+
+                logger.debug(f'Connecting to {ssid}... (current: {current_ssid}, status: {wifi_status}')
+
+                if "status: active" in wifi_status and current_ip != "" and ssid in current_ssid:
+                    # Connected to the ssid so we can exit the loop before the timeout
+                    logger.debug(f'Connected to {ssid} with IP: {current_ip}...')
+                    return
+
+            logger.info(f'Unable to connect to {ssid}, please switch manually...')
+            sys.exit(1)
