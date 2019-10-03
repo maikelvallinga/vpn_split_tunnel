@@ -143,11 +143,20 @@ class MacOSUtils:
         :rtype: str or list
         """
         logger.debug('Getting the current nameservers...')
-        nameservers = self.run_command(f'{self.SUDO} {self.NETWORKSETUP} -getdnsservers {service}')
+
+        # Alternatetive way to get nameservers if configured
+
+        # nameservers = self.run_command(f'{self.SUDO} {self.NETWORKSETUP} -getdnsservers {service}')
+        # If we have a string, cast it to a list
+        # nameservers = [nameservers] if type(nameservers) == str else nameservers
+
         # If we are unable to get the dns we can alternatively get it with nslookup
-        if "There aren't any DNS Servers set" in nameservers:
-            result = self.run_command('cat /etc/resolv.conf').split('\n')
-            nameservers = [line.split()[1] for line in result if 'nameserver' in line]
+        # if "There aren't any DNS Servers set" in nameservers:
+        #     result = self.run_command('cat /etc/resolv.conf').split('\n')
+        #     nameservers = [line.split()[1] for line in result if 'nameserver' in line]
+
+        result = self.run_command('cat /etc/resolv.conf').split('\n')
+        nameservers = [line.split()[1] for line in result if 'nameserver' in line]
         return nameservers
 
     def current_router(self, interface):
