@@ -48,7 +48,7 @@ class VPN(object):
     # MACOS Settings
     USER_ID = config['MACOS']['user_id']
     USERNAME = config['MACOS']['username']
-    MACOS_NOTIFICATION_ENABLED = config['NOTIFICATION'].getboolean('notifications_enabled')
+    MACOS_NOTIFICATION_ENABLED = config['MACOS'].getboolean('notifications_enabled')
 
     # NETWORKING Settings
     ADDRESS_TO_TUNNEL = str(config['NETWORKING']['address_to_tunnel']).split(',')
