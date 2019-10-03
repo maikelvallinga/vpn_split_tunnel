@@ -1,0 +1,62 @@
+[VPN]
+vpn_name: <vpn name>
+
+[MACOS]
+# MacOS Specific details
+username: <MacOS username>
+# Get the user_id in python: import os; os.getuid()
+user_id: 501
+# Enable or disable the notifications
+notifications_enabled: True
+
+[NETWORKING]
+# Hosts addresses which should be routed towards the VPN
+address_to_tunnel: 192.168.1.1,10.0.0.1
+# Networks which should be routed towards the VPN
+networks_to_tunnel: 10/8,192.168.1/24
+# Domains which should be resolved using the VPN DNS servers for DNS Routing
+vpn_domains: my.domain.com
+# The tunnel interface to be used
+tunnel_interface: ipsec0
+# The wireless interface to be used
+wireless_interface: en0
+
+[GENERAL]
+# Enable or disable debugging
+debug: True
+# Number of retries for reconnecting
+retry_count: 5
+# Connection bar width in logfile
+connection_bar_width: 50
+# Log File for output of VPN script
+log_file: /usr/local/var/log/vpn.log
+
+[TIMEOUTS]
+# Timeout for reconnect
+reconnect_timeout: 30
+# Timeout for connect
+connect_timeout: 15
+# Timeout for token to be received automatically
+token_timeout: 15
+# Timeout for wifi switch
+wifi_timeout: 60
+# Maximum number of packet failures before restarting the tunnel
+max_failures: 5
+# Sleep timer
+vpn_sleep_timer = 3
+
+[MOUNTS]
+# The username used for mounting the folders
+mount_username = <username for mounting the directories>
+# The username used for mounting the folders
+mount_password = <password for mounting the directories>
+# Mount the folders or skip this step
+mount_folders = True
+# Home folder
+home_folder: myserver.local/MyHomeFolder
+# Team folder
+team_folder: myserver.local/MyTeamFolder
+# TimeMachine sparsebundle location in home folder
+time_machine_sparse_bundle: /TimeMachine/TimeMachine.sparsebundle
+# TimeMachine sparsebundle password
+time_machine_sparse_bundle_password: <your sparse bundle encryption password>
