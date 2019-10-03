@@ -21,7 +21,7 @@ config.read(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'config.in
 
 DEBUG = config['GENERAL'].getboolean('debug')
 
-logger = logging.getLogger('Split_Tunnel')
+logger = logging.getLogger('VPN')
 if DEBUG:
     logger.setLevel(logging.DEBUG)
 else:

@@ -12,7 +12,7 @@ import sys
 
 from time import time
 
-logger = logging.getLogger('Split_Tunnel')
+logger = logging.getLogger('VPN')
 
 
 class MacOSUtilsException(Exception):
