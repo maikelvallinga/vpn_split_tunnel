@@ -5,7 +5,6 @@ Utilities used within the VPN application.
 It has been tested with MacOS Mojave.
 """
 
-import ipaddress
 import subprocess
 import logging
 import os
@@ -13,47 +12,11 @@ import os
 logger = logging.getLogger('Split_Tunnel')
 
 
-def run_command(command, as_user_id=None):
-    """
-    Function for running a given command and return the output.
-
-    :param command: Command which we want to run
-    :type command: basestring
-    :param as_user_id: The uid for the user we need to run the command for, example 501
-    :type as_user_id: int
-    """
-
-    def change_user(user_uid):
-        """Return a callable which sets the user to the correct user id."""
-
-        def set_id():
-            os.setuid(user_uid)
-
-        return set_id
-
-    if as_user_id:
-        # If the user id is provided set the user before executing the command as preexec_fn
-        set_user = change_user(int(as_user_id))
-
-        # Run the given command
-        process = subprocess.Popen(['bash', '-c', command],
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT,
-                                   preexec_fn=set_user)
-    else:
-        # Run the given command
-        process = subprocess.Popen(['bash', '-c', command],
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT)
-    process.wait()
-    return process.stdout.read().decode(encoding="utf-8").rstrip('\n\r ')
-
-
-class MacOSNetworkUtilsException(Exception):
+class MacOSUtilsException(Exception):
     pass
 
 
-class MacOSNetworkUtils:
+class MacOSUtils:
     """
     Class containing all kind of utils to control the network settings on MacOS.
     """
@@ -80,7 +43,7 @@ class MacOSNetworkUtils:
 
         # Run the netstat command to get the IPv4 routes and remove the unneeded text
         try:
-            raw_routing_table = run_command(f'{self.NETSTAT} -rn -f inet').splitlines()[4:]
+            raw_routing_table = self.run_command(f'{self.NETSTAT} -rn -f inet').splitlines()[4:]
             parsed_routing_table = [{'destination': destination.split()[0],
                                      'gateway': destination.split()[1],
                                      'interface': destination.split()[5]} for destination in raw_routing_table]
@@ -113,12 +76,12 @@ class MacOSNetworkUtils:
         # The interface is always needed
         if not interface:
             logger.error('Interface should be provided!')
-            raise MacOSNetworkUtilsException()
+            raise MacOSUtilsException()
         route_command = f'{self.SUDO} {self.ROUTE} change default -interface {interface}'
-        result = run_command(route_command)
+        result = self.run_command(route_command)
         if f'change net default: gateway {interface}' not in result:
             logger.error(f'Failed to change the default route: {result}')
-            raise MacOSNetworkUtilsException()
+            raise MacOSUtilsException()
         logger.debug(f'Default route set to interface: {interface}')
 
     def add_route(self, destination, gateway=None, interface=None):
@@ -127,16 +90,16 @@ class MacOSNetworkUtils:
         """
         if not gateway and not interface:
             logger.error('At least the interface or gateway should be provided!')
-            raise MacOSNetworkUtilsException()
+            raise MacOSUtilsException()
         elif not destination:
             logger.error('The destination should be provided!')
-            raise MacOSNetworkUtilsException()
+            raise MacOSUtilsException()
 
         route_command_extension = f'-interface {interface}' if interface else gateway
         add_route_command = f'{self.SUDO} {self.ROUTE} -n add {destination} {route_command_extension}'
         logger.info(f'Adding destination {destination}')
         logger.debug(f'Adding route with command: {add_route_command}')
-        run_command(add_route_command)
+        self.run_command(add_route_command)
 
     def delete_route(self, destination):
         """
@@ -145,9 +108,9 @@ class MacOSNetworkUtils:
 
         if not destination:
             logger.error('The destination should be provided!')
-            raise MacOSNetworkUtilsException()
+            raise MacOSUtilsException()
         logger.debug(f'Deleting {destination} from routing table...')
-        run_command(f'{self.SUDO} {self.ROUTE} delete {destination}')
+        self.run_command(f'{self.SUDO} {self.ROUTE} delete {destination}')
 
     def change_nameservers(self, nameservers, service='Wi-Fi'):
         """
@@ -162,7 +125,7 @@ class MacOSNetworkUtils:
 
         if isinstance(nameservers, list):
             nameservers = ' '.join(nameservers)
-        run_command(f'{self.SUDO} {self.NETWORKSETUP} -setdnsservers {service} {nameservers}')
+        self.run_command(f'{self.SUDO} {self.NETWORKSETUP} -setdnsservers {service} {nameservers}')
 
     @property
     def current_nameservers(self, service='Wi-Fi'):
@@ -177,10 +140,10 @@ class MacOSNetworkUtils:
         :rtype: str or list
         """
         logger.debug('Getting the current nameservers...')
-        nameservers = run_command(f'{self.SUDO} {self.NETWORKSETUP} -getdnsservers {service}')
+        nameservers = self.run_command(f'{self.SUDO} {self.NETWORKSETUP} -getdnsservers {service}')
         # If we are unable to get the dns we can alternatively get it with nslookup
         if "There aren't any DNS Servers set" in nameservers:
-            result = run_command('cat /etc/resolv.conf').split('\n')
+            result = self.run_command('cat /etc/resolv.conf').split('\n')
             nameservers = [line.split()[1] for line in result if 'nameserver' in line]
         return nameservers
 
@@ -193,7 +156,7 @@ class MacOSNetworkUtils:
         """
 
         router = ''
-        dhcp_info = run_command(f'{self.SUDO} {self.IPCONFIG} getpacket {interface}').splitlines()
+        dhcp_info = self.run_command(f'{self.SUDO} {self.IPCONFIG} getpacket {interface}').splitlines()
         logger.debug(f'DHCP Information: {dhcp_info}')
         for line in dhcp_info:
             if 'router ' in line:
@@ -201,10 +164,46 @@ class MacOSNetworkUtils:
         logger.debug(f'Current router: {router}')
         return router
 
+    def flush_routing_table(self):
+        """Reset the interfaces and flush the routing table."""
+        self.run_command("sudo ifconfig en0 down")
+        self.run_command("sudo ifconfig en1 down")
+        self.run_command("sudo route flush")
+        self.run_command("sudo ifconfig en0 up")
+        self.run_command("sudo ifconfig en1 up")
+
     @staticmethod
-    def flush_routing_table():
-        run_command("sudo ifconfig en0 down")
-        run_command("sudo ifconfig en1 down")
-        run_command("sudo route flush")
-        run_command("sudo ifconfig en0 up")
-        run_command("sudo ifconfig en1 up")
+    def run_command(command, as_user_id=None):
+        """
+        Function for running a given command and return the output.
+
+        :param command: Command which we want to run
+        :type command: basestring
+        :param as_user_id: The uid for the user we need to run the command for, example 501
+        :type as_user_id: int
+        """
+
+        def change_user(user_uid):
+            """Return a callable which sets the user to the correct user id."""
+
+            def set_id():
+                os.setuid(user_uid)
+
+            return set_id
+
+        if as_user_id:
+            # If the user id is provided set the user before executing the command as preexec_fn
+            set_user = change_user(int(as_user_id))
+
+            # Run the given command
+            process = subprocess.Popen(['bash', '-c', command],
+                                       stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT,
+                                       preexec_fn=set_user)
+        else:
+            # Run the given command
+            process = subprocess.Popen(['bash', '-c', command],
+                                       stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT)
+        process.wait()
+        return process.stdout.read().decode(encoding="utf-8").rstrip('\n\r ')
