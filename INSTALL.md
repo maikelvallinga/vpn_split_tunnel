@@ -33,7 +33,7 @@ Create a copy of the config.ini.example and name it config.ini. Then fill all mi
 Starting the VPN could be done with a single command:
 `source /Users/USERNAME/.virtualenvs/vpn/bin/activate && sudo python /Users/USERNAME/PATH_TO_PROJECT/vpn.py`
 
-If the VPN is used a lot it is better to make an alias for it.
+If the VPN is used a lot, it is better to make an alias for it.
 
 ### Networking
 
