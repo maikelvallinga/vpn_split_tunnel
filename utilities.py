@@ -8,6 +8,8 @@ It has been tested with MacOS Mojave.
 import subprocess
 import logging
 import os
+import pync
+import pwd
 import sys
 
 from time import time
@@ -32,6 +34,17 @@ class MacOSUtils:
     NDP = '/usr/sbin/ndp'
     ARP = '/usr/sbin/arp'
     NETWORKSETUP = '/usr/sbin/networksetup'
+
+    def __init__(self,):
+        """Init needed variables for later use."""
+        if os.environ.get('SUDO_USER'):
+            self.user = os.environ.get('SUDO_USER')
+            self.uid = os.environ.get('SUDO_UID')
+        else:
+            self.user = os.environ.get('USER')
+            self.uid = pwd.getpwnam(self.user).pw_uid
+        logger.debug(f'Username: {self.user}, User ID: {self.uid}')
+        self.wireless_interface = self.get_wireless_network_interface()
 
     @property
     def ipv4_routing_table(self):
@@ -72,7 +85,7 @@ class MacOSUtils:
             display += f'{interface}\n'
         return display
 
-    def set_default_route(self, interface='en0'):
+    def set_default_route(self, interface='en0', ip_address=''):
         """
         Set the default route to a given interface.
         """
@@ -80,10 +93,23 @@ class MacOSUtils:
         if not interface:
             logger.error('Interface should be provided!')
             raise MacOSUtilsException()
-        route_command = f'{self.SUDO} {self.ROUTE} change default -interface {interface}'
+
+        # Get routing table and check if default route is set to a different interface
+        default_routes = self.run_command(f'{self.NETSTAT} -rn | grep default')
+        if default_routes and interface in default_routes.split('\n')[0]:
+            logger.debug('Default route is already configured.')
+            return
+
+        command_addition = f'{ip_address}' if ip_address else f'-interface {interface}'
+
+        route_command = f'{self.SUDO} {self.ROUTE} change default {command_addition}'
         result = self.run_command(route_command)
-        if f'change net default: gateway {interface}' not in result:
-            logger.error(f'Failed to change the default route: {result}')
+        if 'not in table' in result:
+            logger.debug('No default route, try to add one')
+            route_command = f'{self.SUDO} {self.ROUTE} add default {command_addition}'
+            result = self.run_command(route_command)
+        if f'change net default: gateway' not in result and 'add net default: gateway' not in result:
+            logger.error(f'Failed to change or create the default route: {result}')
             raise MacOSUtilsException()
         logger.debug(f'Default route set to interface: {interface}')
 
@@ -159,7 +185,7 @@ class MacOSUtils:
         nameservers = [line.split()[1] for line in result if 'nameserver' in line]
         return nameservers
 
-    def current_router(self, interface):
+    def gateway_for_interface(self, interface):
         """
         Get the current default gateway and return it.
 
@@ -176,23 +202,27 @@ class MacOSUtils:
         logger.debug(f'Current router: {router}')
         return router
 
-    def flush_routing_table(self):
+    def flush_routing_table(self, reset_interfaces=True):
         """Reset the interfaces and flush the routing table."""
-        self.run_command("sudo ifconfig en0 down")
-        self.run_command("sudo ifconfig en1 down")
+        if reset_interfaces:
+            logger.info('Shutdown network interfaces')
+            self.run_command("sudo ifconfig en0 down")
+            self.run_command("sudo ifconfig en1 down")
+        logger.info('Flushing routing table')
         self.run_command("sudo route flush")
-        self.run_command("sudo ifconfig en0 up")
-        self.run_command("sudo ifconfig en1 up")
+        if reset_interfaces:
+            logger.info('Enable network interfaces')
+            self.run_command("sudo ifconfig en0 up")
+            self.run_command("sudo ifconfig en1 up")
 
-    @staticmethod
-    def run_command(command, as_user_id=None):
+    def run_command(self, command, as_user=False):
         """
         Function for running a given command and return the output.
 
         :param command: Command which we want to run
         :type command: basestring
-        :param as_user_id: The uid for the user we need to run the command for, example 501
-        :type as_user_id: int
+        :param as_user: Run it as the official user, if python started as root
+        :type as_user: int
         """
 
         def change_user(user_uid):
@@ -203,9 +233,9 @@ class MacOSUtils:
 
             return set_id
 
-        if as_user_id:
+        if as_user:
             # If the user id is provided set the user before executing the command as preexec_fn
-            set_user = change_user(int(as_user_id))
+            set_user = change_user(int(self.uid))
 
             # Run the given command
             process = subprocess.Popen(['bash', '-c', command],
@@ -220,28 +250,48 @@ class MacOSUtils:
         process.wait()
         return process.stdout.read().decode(encoding="utf-8").rstrip('\n\r ')
 
-    def switch_wifi(self, ssid, wireless_interface='en0', timeout=30):
+    def get_wireless_network_interface(self):
+        """Get the Wi-Fi interface and set it as a variable."""
+
+        network_service_order = self.run_command(f"{self.NETWORKSETUP} -listnetworkserviceorder | grep 'Hardware Port'")
+        network_service_order_list = network_service_order.split('\n')
+
+        # Example of a single line: (Hardware Port: Wi-Fi, Device: en0)
+        for network_service in network_service_order_list:
+            if not 'Wi-Fi' in network_service:
+                continue
+            hardware, device = network_service.strip('()').split(',')
+            device = device.split(':')[1].strip()
+            logger.debug(f'Wireless interface detected: {device}')
+            return device
+        logger.debug('Unable to detect the wireless interface')
+        return ''
+
+    def switch_to_ssid(self, ssid, timeout=30):
         """
         Switch to a preferred ssid.
 
         :return:
         """
+        if not self.wireless_interface:
+            logger.error('Wireless interface must be set')
+            sys.exit(1)
 
-        current_ssid = self.run_command(f'{self.NETWORKSETUP} -getairportnetwork {wireless_interface}')
+        current_ssid = self.run_command(f'{self.NETWORKSETUP} -getairportnetwork {self.wireless_interface}')
 
         if ssid not in current_ssid:
             logger.info(f'Switching wireless to {ssid}...')
-            self.run_command(f'{self.NETWORKSETUP} -setairportnetwork {wireless_interface} {ssid}')
+            self.run_command(f'{self.NETWORKSETUP} -setairportnetwork {self.wireless_interface} {ssid}')
 
             timeout = time() + timeout
-            wifi_status = self.run_command(f"{self.IFCONFIG} {wireless_interface}")
-            current_ip = self.run_command(f"{self.IPCONFIG} getifaddr {wireless_interface}")
+            wifi_status = self.run_command(f"{self.IFCONFIG} {self.wireless_interface}")
+            current_ip = self.run_command(f"{self.IPCONFIG} getifaddr {self.wireless_interface}")
 
             while time() < timeout:
 
-                current_ssid = self.run_command(f'{self.NETWORKSETUP} -getairportnetwork {wireless_interface}')
-                wifi_status = self.run_command(f'{self.IFCONFIG} {wireless_interface}')
-                current_ip = self.run_command(f'{self.IPCONFIG} getifaddr {wireless_interface}')
+                current_ssid = self.run_command(f'{self.NETWORKSETUP} -getairportnetwork {self.wireless_interface}')
+                wifi_status = self.run_command(f'{self.IFCONFIG} {self.wireless_interface}')
+                current_ip = self.run_command(f'{self.IPCONFIG} getifaddr {self.wireless_interface}')
                 if str(current_ip).startswith('169.254'):
                     # If APIPA address is assigned, re-enter the loop
                     continue
@@ -255,3 +305,28 @@ class MacOSUtils:
 
             logger.info(f'Unable to connect to {ssid}, please switch manually...')
             sys.exit(1)
+
+    def connected_ssid(self):
+        """Check which SSID is connected."""
+        return self.run_command(f'{self.NETWORKSETUP} -getairportnetwork {self.wireless_interface}')
+
+    def get_active_network_interface(self):
+        """Get the list of network services and return the active service."""
+
+        network_service_order = self.run_command(f"{self.NETWORKSETUP} -listnetworkserviceorder | grep 'Hardware Port'")
+        network_service_order_list = network_service_order.split('\n')
+
+        logger.debug(network_service_order_list)
+
+        # Example of a single line: (Hardware Port: Wi-Fi, Device: en0)
+        for network_service in network_service_order_list:
+            hardware, device = network_service.strip('()').split(',')
+            hardware = hardware.split(':')[1].strip()
+            device = device.split(':')[1].strip()
+            # Check if the interface has an ip address and is active
+            interface_address = self.run_command(f'{self.IPCONFIG} getifaddr {device}')
+            if interface_address:
+                logger.info(f'[Active] - Service: {hardware}, Interface: {device}, IP Address: {interface_address}')
+                return device
+        pync.notify(f'There is no network connectivity...')
+        return ''
