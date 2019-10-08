@@ -59,10 +59,15 @@ class MacOSUtils:
 
         # Run the netstat command to get the IPv4 routes and remove the unneeded text
         try:
-            raw_routing_table = self.run_command(f'{self.NETSTAT} -rn -f inet').splitlines()[4:]
-            parsed_routing_table = [{'destination': destination.split()[0],
-                                     'gateway': destination.split()[1],
-                                     'interface': destination.split()[5]} for destination in raw_routing_table]
+            raw_routing_table = self.run_command(f'{self.NETSTAT} -rn -f inet').splitlines()
+            headers = raw_routing_table[3].split()
+            destination_index = headers.index('Destination')
+            gateway_index = headers.index('Gateway')
+            netif_index = headers.index('Netif')
+            data = raw_routing_table[4:]
+            parsed_routing_table = [{'destination': destination.split()[destination_index],
+                                     'gateway': destination.split()[gateway_index],
+                                     'interface': destination.split()[netif_index]} for destination in data]
             return parsed_routing_table
         except IndexError:
             logger.error('Seems that something changed in the MacOS routing table. Please check the code and fix it!')
