@@ -253,7 +253,8 @@ class VPN(object):
             logger.info("Unable to stop VPN. Please do this manually")
             logger.info(f'vpnutil responded: {result}')
         self.active = False
-        mac_utils.flush_routing_table(reset_interfaces=False)
+        logger.info('Restore routing table, after closing the VPN.')
+        #mac_utils.flush_routing_table(reset_interfaces=False)
         network_interface = mac_utils.get_active_network_interface()
         gateway_address = mac_utils.gateway_for_interface(network_interface)
         mac_utils.set_default_route(self.active_interface, ip_address=gateway_address)
@@ -266,6 +267,9 @@ class VPN(object):
         """
         self.stop_tunnel()
         sys.exit(0)
+        # If we get beyond this line the exit didn't work correctly, force kill
+        logger.info('Killing nicely didn\'t work, kill it forced!')
+        os.system('kill %d' % os.getpid())
 
     def mount_folders(self):
         if self.active:
